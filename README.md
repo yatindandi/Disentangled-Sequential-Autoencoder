@@ -1,5 +1,5 @@
 # Disentangled Sequential Autoencoder
-PyTorch implementation of [Disentangled Sequential Autoencoder](https://arxiv.org/abs/1803.02991), a Variational Autoencoder Architecture for learning latent representations of high dimensional sequential data by approximately disentangling the time invariant and the time variable features. 
+PyTorch implementation of [Disentangled Sequential Autoencoder](https://arxiv.org/abs/1803.02991) (Mandt et al.), a Variational Autoencoder Architecture for learning latent representations of high dimensional sequential data by approximately disentangling the time invariant and the time variable features. 
 
 ## Results
 We test our network on the [Liberated Pixel Cup](https://github.com/jrconway3/Universal-LPC-spritesheet) dataset consisting of sprites of video game characters of varying hairstyle, clothing, skin color and pose. We constrain ourselves to three particular types of poses, walking, slashing and spellcasting. The network learns disentangled vector representations for the static (elements like skin color and hair color) and dynamic aspects (motion) in the vectors f, and z1, z2, z3, .. z8 (one for each frame), respectively
