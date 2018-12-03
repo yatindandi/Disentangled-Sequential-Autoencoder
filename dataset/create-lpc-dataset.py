@@ -44,19 +44,19 @@ hairstyles = ['green','blue','pink','raven','white','dark_blonde']
 pants = ['magenta','red','teal','white','robe_skirt']
 train = 0
 test = 0
-for body in bodies:
+for id_body, body in enumerate(bodies):
     driver.execute_script("return arguments[0].click();",driver.find_element_by_id('body-'+body))
     time.sleep(0.5)
-    for shirt in shirts:
+    for id_shirt, shirt in enumerate(shirts):
         driver.execute_script("return arguments[0].click();",driver.find_element_by_id('clothes-'+shirt))
         time.sleep(0.5)
-        for pant in pants:
+        for id_pant, pant in enumerate(pants):
             if pant=='robe_skirt':
                 driver.execute_script("return arguments[0].click();",driver.find_element_by_id('legs-'+pant))
             else:
                 driver.execute_script("return arguments[0].click();",driver.find_element_by_id('legs-pants_'+pant))
             time.sleep(0.5)
-            for hair in hairstyles:
+            for id_hair, hair in enumerate(hairstyles):
                 driver.execute_script("return arguments[0].click();",driver.find_element_by_id('hair-plain_'+hair))
                 time.sleep(0.5)
                 name = body+"_"+shirt+"_"+pant+"_"+hair
@@ -67,17 +67,24 @@ for body in bodies:
                 with open(str(name) + ".png","wb") as f:
                     f.write(canvas_png)
                 slices = prepare_tensor(str(name) + ".png")
-                print("Dimension is {}".format(slices[0].shape))
                 p = torch.rand(1).item() <= 0.1 #Randomly add 10% of the characters created in the test set
-                if p is True:
-                    for sprites in slices:
+                for id_action, sprites in enumerate(slices):
+                    if p is True:
                         test += 1
-                        print('Saving %d.sprite in test set' % test)
-                        torch.save(sprites,'./lpc-dataset/test/%d.sprite' % test)
-                else:
-                    for sprites in slices:
+                        path = './lpc-dataset/test/%d.sprite' % test
+                    else:
                         train += 1
-                        print('Saving %d.sprite in train set' % train)
-                        torch.save(sprites,'./lpc-dataset/train/%d.sprite' % train)
+                        path = './lpc-dataset/train/%d.sprite' % train
+
+                    final_sprite = {
+                            'body': id_body,
+                            'shirt': id_shirt,
+                            'pant': id_pant,
+                            'hair': id_hair,
+                            'action': id_action,
+                            'sprite': sprites
+                    }
+                    print(id_body,id_shirt,id_pant,id_hair,id_action)
+                    torch.save(final_sprite, path)
  
 print("Dataset is Ready.Training Set Size : %d. Test Set Size : %d " % (train,test))

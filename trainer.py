@@ -5,6 +5,7 @@ import torch.utils.data
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+from model import *
 
 __all__ = ['Sprites', 'loss_fn', 'Trainer']
 class Sprites(torch.utils.data.Dataset):
@@ -16,7 +17,8 @@ class Sprites(torch.utils.data.Dataset):
         return self.length
         
     def __getitem__(self,idx):
-        return torch.load(self.path+'/%d.sprite' % (idx+1))
+        item = torch.load(self.path+'/%d.sprite' % (idx+1))
+        return item['body'], item['shirt'], item['pant'], item['hair'], item['action'], item['sprite']
 
 
 def loss_fn(original_seq,recon_seq,f_mean,f_logvar,z_mean,z_logvar):
@@ -29,8 +31,8 @@ def loss_fn(original_seq,recon_seq,f_mean,f_logvar,z_mean,z_logvar):
 class Trainer(object):
     def __init__(self,model,train,test,trainloader,testloader,
                  epochs=50,batch_size=64,learning_rate=0.001,nsamples=8,sample_path='./sample',
-                 recon_path='./recon', transfer_path = './transfer', 
-                 checkpoints='model.pth', style1='image1.sprite', style2='image2.sprite'):
+                 recon_path='./recon/', transfer_path = './transfer/', 
+                 checkpoints='model.pth', style1='image1.sprite', style2='image2.sprite', device=torch.device('cuda:0')):
         self.trainloader = trainloader
         self.train = train
         self.test = test
@@ -54,8 +56,8 @@ class Trainer(object):
         self.test_zf = torch.cat((self.test_z,f_expand),dim=2)
         self.epoch_losses = []
 
-        self.image1 = torch.load(self.transfer_path + 'image1.sprite')
-        self.image2 = torch.load(self.transfer_path + 'image2.sprite')
+        self.image1 = torch.load(self.transfer_path + 'image1.sprite')['sprite']
+        self.image2 = torch.load(self.transfer_path + 'image2.sprite')['sprite']
         self.image1 = self.image1.to(device)
         self.image2 = self.image2.to(device)
         self.image1 = torch.unsqueeze(self.image1,0)
@@ -115,7 +117,7 @@ class Trainer(object):
             image2_body_image1_motion = torch.squeeze(image2_body_image1_motion,0)
             os.makedirs(os.path.dirname('%s/epoch%d/image1_body_image2_motion.png' % (self.transfer_path,epoch)),exist_ok=True)
             torchvision.utils.save_image(image1_body_image2_motion,'%s/epoch%d/image1_body_image2_motion.png' % (transfer_path,epoch))
-            torchvision.utils.save_image(image2_body_image1_motion,'%s/epoch%d/image2_body_image1_motion.png' % (transfer_path,epoch)))
+            torchvision.utils.save_image(image2_body_image1_motion,'%s/epoch%d/image2_body_image1_motion.png' % (transfer_path,epoch))
 
 
 
@@ -124,8 +126,10 @@ class Trainer(object):
        for epoch in range(self.start_epoch,self.epochs):
            losses = []
            print("Running Epoch : {}".format(epoch+1))
-           for i,data in enumerate(self.trainloader,1):
-               data = data.to(device)
+           for i,dataitem in enumerate(self.trainloader,1):
+               a1,a2,a3,a4,a5,data = dataitem
+               print(a1,a2,a3,a4,a5)
+               data = data.to(self.device)
                self.optimizer.zero_grad()
                f_mean,f_logvar,f,z_mean,z_logvar,z,recon_x = self.model(data)
                loss = loss_fn(data,recon_x,f_mean,f_logvar,z_mean,z_logvar)
@@ -145,3 +149,9 @@ class Trainer(object):
            self.style_transfer(epoch+1)
            self.model.train()
        print("Training is complete")
+
+sprite = Sprites('./dataset/lpc-dataset/train', 6732)
+loader = torch.utils.data.DataLoader(sprite, batch_size=8, shuffle=True, num_workers=4)
+vae = DisentangledVAE()
+trainer = Trainer(vae, sprite, None, loader ,None, batch_size=8)
+trainer.train_model()
