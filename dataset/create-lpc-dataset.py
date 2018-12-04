@@ -81,10 +81,10 @@ for id_body, body in enumerate(bodies):
                             'shirt': id_shirt,
                             'pant': id_pant,
                             'hair': id_hair,
-                            'action': id_action,
+                            'action': id_action // 3,
                             'sprite': sprites
                     }
-                    print(id_body,id_shirt,id_pant,id_hair,id_action)
+                    print(id_body,id_shirt,id_pant,id_hair,id_action // 3)
                     torch.save(final_sprite, path)
  
 print("Dataset is Ready.Training Set Size : %d. Test Set Size : %d " % (train,test))
