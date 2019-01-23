@@ -119,6 +119,9 @@ class DisentangledVAE(nn.Module):
                   The initial video tensor (batch_size, frames, num_channels, in_size, in_size) is converted to (batch_size, frames, conv_dim)
         factorised: Toggles between full and factorised posterior for z as discussed in the paper
 
+    Optimization:
+        The model is trained with the Adam optimizer with a learning rate of 0.0002, betas of 0.9 and 0.999, with a batch size of 25 for 200 epochs
+
     """
     def __init__(self, f_dim=256, z_dim=32, conv_dim=2048, step=256, in_size=64, hidden_dim=512,
                  frames=8, nonlinearity=None, factorised=False, device=torch.device('cpu')):
@@ -184,11 +187,13 @@ class DisentangledVAE(nn.Module):
             elif isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight)
 
+    # If random sampling is true, reparametrization occurs else z_t is just set to the mean
     def sample_z(self, batch_size, random_sampling=True):
-        z_out = None
+        z_out = None # This will ultimately store all z_s in the format [batch_size, frames, z_dim]
         z_means = None
         z_logvars = None
 
+        # All states are initially set to 0, especially z_0 = 0
         z_t = torch.zeros(batch_size, self.z_dim, device=self.device)
         z_mean_t = torch.zeros(batch_size, self.z_dim, device=self.device)
         z_logvar_t = torch.zeros(batch_size, self.z_dim, device=self.device)
@@ -201,10 +206,12 @@ class DisentangledVAE(nn.Module):
             z_logvar_t = self.z_prior_logvar(h_t)
             z_t = self.reparameterize(z_mean_t, z_logvar_t, random_sampling)
             if z_out is None:
+                # If z_out is none it means z_t is z_1, hence store it in the format [batch_size, 1, z_dim]
                 z_out = z_t.unsqueeze(1)
                 z_means = z_mean_t.unsqueeze(1)
                 z_logvars = z_logvar_t.unsqueeze(1)
             else:
+                # If z_out is not none, z_t is not the initial z and hence append it to the previous z_ts collected in z_out
                 z_out = torch.cat((z_out, z_t.unsqueeze(1)), dim=1)
                 z_means = torch.cat((z_means, z_mean_t.unsqueeze(1)), dim=1)
                 z_logvars = torch.cat((z_logvars, z_logvar_t.unsqueeze(1)), dim=1)
@@ -213,10 +220,14 @@ class DisentangledVAE(nn.Module):
 
 
     def encode_frames(self, x):
+        # The frames are unrolled into the batch dimension for batch processing such that x goes from
+        # [batch_size, frames, channels, size, size] to [batch_size * frames, channels, size, size]
         x = x.view(-1, 3, self.in_size, self.in_size)
         x = self.conv(x)
         x = x.view(-1, self.step * (self.final_conv_size ** 2))
         x = self.conv_fc(x)
+        # The frame dimension is reintroduced and x shape becomes [batch_size, frames, conv_dim]
+        # This technique is repeated at several points in the code
         x = x.view(-1, self.frames, self.conv_dim)
         return x
 
@@ -227,6 +238,7 @@ class DisentangledVAE(nn.Module):
         return x.view(-1, self.frames, 3, self.in_size, self.in_size)
 
     def reparameterize(self, mean, logvar, random_sampling=True):
+        # Reparametrization occurs only if random sampling is set to true, otherwise mean is returned
         if random_sampling is True:
             eps = torch.randn_like(logvar)
             std = torch.exp(0.5*logvar)
@@ -237,6 +249,9 @@ class DisentangledVAE(nn.Module):
 
     def encode_f(self, x):
         lstm_out, _ = self.f_lstm(x)
+        # The features of the last timestep of the forward RNN is stored at the end of lstm_out in the first half, and the features
+        # of the "first timestep" of the backward RNN is stored at the beginning of lstm_out in the second half
+        # For a detailed explanation, check: https://gist.github.com/ceshine/bed2dadca48fe4fe4b4600ccce2fd6e1
         backward = lstm_out[:, 0, self.hidden_dim:2 * self.hidden_dim]
         frontal = lstm_out[:, self.frames - 1, 0:self.hidden_dim]
         lstm_out = torch.cat((frontal, backward), dim=1)
@@ -248,6 +263,7 @@ class DisentangledVAE(nn.Module):
         if self.factorised is True:
             features = self.z_inter(x)
         else:
+            # The expansion is done to match the dimension of x and f, used for concatenating f to each x_t
             f_expand = f.unsqueeze(1).expand(-1, self.frames, self.f_dim)
             lstm_out, _ = self.z_lstm(torch.cat((x, f_expand), dim=2))
             features, _ = self.z_rnn(lstm_out)

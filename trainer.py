@@ -12,8 +12,15 @@ from dataset import *
 __all__ = ['loss_fn', 'Trainer']
 
 
-
 def loss_fn(original_seq,recon_seq,f_mean,f_logvar,z_post_mean,z_post_logvar, z_prior_mean, z_prior_logvar):
+    """
+    Loss function consists of 3 parts, the reconstruction term that is the MSE loss between the generated and the original images
+    the KL divergence of f, and the sum over the KL divergence of each z_t, with the sum divided by batch_size
+
+    Loss = {mse + KL of f + sum(KL of z_t)} / batch_size
+    Prior of f is a spherical zero mean unit variance Gaussian and the prior of each z_t is a Gaussian whose mean and variance
+    are given by the LSTM
+    """
     batch_size = original_seq.size(0)
     mse = F.mse_loss(recon_seq,original_seq,reduction='sum');
     kld_f = -0.5 * torch.sum(1 + f_logvar - torch.pow(f_mean,2) - torch.exp(f_logvar))
@@ -161,6 +168,6 @@ device = torch.device('cuda:1')
 vae = DisentangledVAE(f_dim=256, z_dim=32, step=256, factorised=True,device=device)
 test_f = torch.rand(1,256, device=device)
 test_f = test_f.unsqueeze(1).expand(1, 8, 256)
-trainer = Trainer(vae, sprite, sprite_test, loader ,None, test_f, batch_size=30, epochs=500, learning_rate=0.0002, device=device)
+trainer = Trainer(vae, sprite, sprite_test, loader ,None, test_f,batch_size=25, epochs=500, learning_rate=0.0002, device=device)
 trainer.load_checkpoint()
 trainer.train_model()
