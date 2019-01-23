@@ -2,10 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['DisentangledVAE']
 
-
-# Differences from original paper : Step up the number of filters in multiples of 64
+# A block consisting of convolution, batch normalization (optional) followed by a nonlinearity (defaults to Leaky ReLU)
 class ConvUnit(nn.Module):
     def __init__(self, in_channels, out_channels, kernel, stride=1, padding=0, batchnorm=True, nonlinearity=nn.LeakyReLU(0.2)):
         super(ConvUnit, self).__init__()
@@ -19,6 +17,7 @@ class ConvUnit(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+# A block consisting of a transposed convolution, batch normalization (optional) followed by a nonlinearity (defaults to Leaky ReLU)
 class ConvUnitTranspose(nn.Module):
     def __init__(self, in_channels, out_channels, kernel, stride=1, padding=0, out_padding=0, batchnorm=True, nonlinearity=nn.LeakyReLU(0.2)):
         super(ConvUnitTranspose, self).__init__()
@@ -32,6 +31,7 @@ class ConvUnitTranspose(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+# A block consisting of an affine layer, batch normalization (optional) followed by a nonlinearity (defaults to Leaky ReLU)
 class LinearUnit(nn.Module):
     def __init__(self, in_features, out_features, batchnorm=True, nonlinearity=nn.LeakyReLU(0.2)):
         super(LinearUnit, self).__init__()
@@ -48,6 +48,78 @@ class LinearUnit(nn.Module):
 
 
 class DisentangledVAE(nn.Module):
+    """
+    Network Architecture:
+        PRIOR OF Z:
+            The prior of z is a Gaussian with mean and variance computed by the LSTM as follows
+                h_t, c_t = prior_lstm(z_t-1, (h_t, c_t)) where h_t is the hidden state and c_t is the cell state
+            Now the hidden state h_t is used to compute the mean and variance of z_t using an affine transform
+                z_mean, z_log_variance = affine_mean(h_t), affine_logvar(h_t)
+                z = reparameterize(z_mean, z_log_variance)
+            The hidden state has dimension 512 and z has dimension 32
+
+        CONVOLUTIONAL ENCODER:
+            The convolutional encoder consists of 4 convolutional layers with 256 layers and a kernel size of 5 
+            Each convolution is followed by a batch normalization layer and a LeakyReLU(0.2) nonlinearity. 
+            For the 3,64,64 frames (all image dimensions are in channel, width, height) in the sprites dataset the following dimension changes take place
+            
+            3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8 (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))
+
+            The 8,8,256 tensor is unrolled into a vector of size 8*8*256 which is then made to undergo the following tansformations
+            
+            8*8*256 -> 4096 -> 2048 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+
+        APPROXIMATE POSTERIOR FOR f:
+            The approximate posterior is parameterized by a bidirectional LSTM that takes the entire sequence of transformed x_ts (after being fed into the convolutional encoder)
+            as input in each timestep. The hidden layer dimension is 512
+
+            Then the features from the unit corresponding to the last timestep of the forward LSTM and the unit corresponding to the first timestep of the 
+            backward LSTM (as shown in the diagram in the paper) are concatenated and fed to two affine layers (without any added nonlinearity) to compute
+            the mean and variance of the Gaussian posterior for f
+
+        APPROXIMATE POSTERIOR FOR z (FACTORIZED q)
+            Each x_t is first fed into an affine layer followed by a LeakyReLU(0.2) nonlinearity to generate an intermediate feature vector of dimension 512,
+            which is then followed by two affine layers (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each z_t
+
+            inter_t = intermediate_affine(x_t)
+            z_mean_t, z_log_variance_t = affine_mean(inter_t), affine_logvar(inter_t)
+            z = reparameterize(z_mean_t, z_log_variance_t)
+
+        APPROXIMATE POSTERIOR FOR z (FULL q)
+            The vector f is concatenated to each v_t where v_t is the encodings generated for each frame x_t by the convolutional encoder. This entire sequence  is fed into a bi-LSTM
+            of hidden layer dimension 512. Then the features of the forward and backward LSTMs are fed into an RNN having a hidden layer dimension 512. The output h_t of each timestep
+            of this RNN transformed by two affine transformations (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each z_t
+
+            g_t = [v_t, f] for each timestep
+            forward_features, backward_features = lstm(g_t for all timesteps)
+            h_t = rnn([forward_features, backward_features])
+            z_mean_t, z_log_variance_t = affine_mean(h_t), affine_logvar(h_t)
+            z = reparameterize(z_mean_t, z_log_variance_t)
+
+        CONVOLUTIONAL DECODER FOR CONDITIONAL DISTRIBUTION p(x_t | f, z_t)
+            The architecture is symmetric to that of the convolutional encoder. The vector f is concatenated to each z_t, which then undergoes two subsequent
+            affine transforms, causing the following change in dimensions
+            
+            256 + 32 -> 4096 -> 8*8*256 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+
+            The 8*8*256 tensor is reshaped into a tensor of shape 256,8,8 and then undergoes the following dimension changes 
+
+            256,8,8 -> 256,16,16 -> 256,32,32 -> 256,64,64 -> 3,64,64 (where each -> consists of a transposed convolution, batch normalization followed by LeakyReLU(0.2)
+            with the exception of the last layer that does not have batchnorm and uses tanh nonlinearity)
+
+    Hyperparameters:
+        f_dim: Dimension of the content encoding f. f has the shape (batch_size, f_dim)
+        z_dim: Dimension of the dynamics encoding of a frame z_t. z has the shape (batch_size, frames, z_dim) 
+        frames: Number of frames in the video. 
+        hidden_dim: Dimension of the hidden states of the RNNs 
+        nonlinearity: Nonlinearity used in convolutional and deconvolutional layers, defaults to LeakyReLU(0.2)
+        in_size: Height and width of each frame in the video (assumed square)
+        step: Number of channels in the convolutional and deconvolutional layers
+        conv_dim: The convolutional encoder converts each frame into an intermediate encoding vector of size conv_dim, i.e,
+                  The initial video tensor (batch_size, frames, num_channels, in_size, in_size) is converted to (batch_size, frames, conv_dim)
+        factorised: Toggles between full and factorised posterior for z as discussed in the paper
+
+    """
     def __init__(self, f_dim=256, z_dim=32, conv_dim=2048, step=256, in_size=64, hidden_dim=512,
                  frames=8, nonlinearity=None, factorised=False, device=torch.device('cpu')):
         super(DisentangledVAE, self).__init__()
@@ -76,9 +148,9 @@ class DisentangledVAE(nn.Module):
 
         if self.factorised is True:
             # Paper says : 1 Hidden Layer MLP. Last layers shouldn't have any nonlinearities
-            self.z_inter = LinearUnit(self.conv_dim, self.conv_dim // 4, batchnorm=False)
-            self.z_mean = nn.Linear(self.conv_dim // 4, self.z_dim)
-            self.z_logvar = nn.Linear(self.conv_dim // 4, self.z_dim)
+            self.z_inter = LinearUnit(self.conv_dim, self.hidden_dim, batchnorm=False)
+            self.z_mean = nn.Linear(self.hidden_dim, self.z_dim)
+            self.z_logvar = nn.Linear(self.hidden_dim, self.z_dim)
         else:
             # TODO: Check if one affine transform is sufficient. Paper says distribution is parameterised by RNN over LSTM. Last layer shouldn't have any nonlinearities
             self.z_lstm = nn.LSTM(self.conv_dim + self.f_dim, self.hidden_dim, 1, bidirectional=True, batch_first=True)
