@@ -1,59 +1,78 @@
 # Disentangled Sequential Autoencoder
-PyTorch implementation of [Disentangled Sequential Autoencoder](https://arxiv.org/abs/1803.02991) (Mandt et al.), a Variational Autoencoder Architecture for learning latent representations of high dimensional sequential data by approximately disentangling the time invariant and the time variable features. 
+PyTorch implementation of [Disentangled Sequential Autoencoder](https://arxiv.org/abs/1803.02991)  a Variational Autoencoder Architecture for learning latent representations of high dimensional sequential data by approximately disentangling the time invariant and the time variable features. 
 
-## Results
-We test our network on the [Liberated Pixel Cup](https://github.com/jrconway3/Universal-LPC-spritesheet) dataset consisting of sprites of video game characters of varying hairstyle, clothing, skin color and pose. We constrain ourselves to three particular types of poses, walking, slashing and spellcasting. The network learns disentangled vector representations for the static (elements like skin color and hair color) and dynamic aspects (motion) in the vectors f, and z1, z2, z3, .. z8 (one for each frame), respectively
+# Network Architecture
 
-### Style Transfer
-We perform style transfer by learning the f and z  encodings of two characters that differ in both appearance and pose, and swap their z encodings. This causes the characters to interchange their pattern of motion while preserving appearance ,allowing manipulations like "blue dark elf walking" swapped with "lightskinned human spellcasting" gives "blue dark elf spellcasting" and "lightskinned human walking" respectively
+##PRIOR OF Z:
 
-<table align='center'>
-<tr align='center'>
-<td>Sprite 1</td>
-<td>Sprite 2</td>
-<td>Sprite 1's Body With Sprite 2's Pose</td>
-<td>Sprite 2's Body With Sprite 1's Pose</td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set1/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set1/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set1/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set1/image2_body_image1_motion.png'></td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set2/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set2/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set2/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set2/image2_body_image1_motion.png'></td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set3/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set3/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set3/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set3/image2_body_image1_motion.png'></td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set4/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set4/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set4/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set4/image2_body_image1_motion.png'></td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set5/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set5/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set5/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set5/image2_body_image1_motion.png'></td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set6/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set6/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set6/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set6/image2_body_image1_motion.png'></td>
-</tr>
-<tr>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set7/image1.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set7/image2.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set7/image1_body_image2_motion.png'></td>
-<td height="200%"><img height="100% width="150%" src='test/style-transfer/set7/image2_body_image1_motion.png'></td>
-</tr>
-</table>
+The prior of z is a Gaussian with mean and variance computed by the LSTM as follows
+```
+h_t, c_t = prior_lstm(z_t-1, (h_t, c_t)) where h_t is the hidden state and c_t is the cell state
+```
+Now the hidden state ```h_t``` is used to compute the mean and variance of ```z_t``` using an affine transform
+```
+z_mean, z_log_variance = affine_mean(h_t), affine_logvar(h_t)
+z = reparameterize(z_mean, z_log_variance)
+```
+The hidden state has dimension 512 and z has dimension 32
+
+##CONVOLUTIONAL ENCODER:
+
+The convolutional encoder consists of 4 convolutional layers with 256 layers and a kernel size of 5
+Each convolution is followed by a batch normalization layer and a LeakyReLU(0.2) nonlinearity.
+For the 3,64,64 frames (all image dimensions are in channel, width, height) in the sprites dataset the following dimension changes take place
+
+3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8 (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))
+
+The 8,8,256 tensor is unrolled into a vector of size 8*8*256 which is then made to undergo the following tansformations
+
+8*8*256 -> 4096 -> 2048 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+
+##APPROXIMATE POSTERIOR FOR f:
+
+The approximate posterior is parameterized by a bidirectional LSTM that takes the entire sequence of transformed x_ts (after being fed into the convolutional encoder)
+as input in each timestep. The hidden layer dimension is 512
+
+Then the features from the unit corresponding to the last timestep of the forward LSTM and the unit corresponding to the first timestep of the
+backward LSTM (as shown in the diagram in the paper) are concatenated and fed to two affine layers (without any added nonlinearity) to compute
+the mean and variance of the Gaussian posterior for f
+
+##APPROXIMATE POSTERIOR FOR z (FACTORIZED q)
+
+Each x_t is first fed into an affine layer followed by a LeakyReLU(0.2) nonlinearity to generate an intermediate feature vector of dimension 512,
+which is then followed by two affine layers (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each z_t
+
+```
+inter_t = intermediate_affine(x_t)
+z_mean_t, z_log_variance_t = affine_mean(inter_t), affine_logvar(inter_t)
+z = reparameterize(z_mean_t, z_log_variance_t)
+```
+
+##APPROXIMATE POSTERIOR FOR z (FULL q)
+
+The vector f is concatenated to each v_t where v_t is the encodings generated for each frame x_t by the convolutional encoder. This entire sequence  is fed into a bi-LSTM
+of hidden layer dimension 512. Then the features of the forward and backward LSTMs are fed into an RNN having a hidden layer dimension 512. The output h_t of each timestep
+of this RNN transformed by two affine transformations (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each z_t
+
+```
+g_t = [v_t, f] for each timestep
+forward_features, backward_features = lstm(g_t for all timesteps)
+h_t = rnn([forward_features, backward_features])
+z_mean_t, z_log_variance_t = affine_mean(h_t), affine_logvar(h_t)
+z = reparameterize(z_mean_t, z_log_variance_t)
+```
+
+##CONVOLUTIONAL DECODER FOR CONDITIONAL DISTRIBUTION 
+
+The architecture is symmetric to that of the convolutional encoder. The vector f is concatenated to each z_t, which then undergoes two subsequent
+affine transforms, causing the following change in dimensions
+
+256 + 32 -> 4096 -> 8*8*256 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+
+The 8*8*256 tensor is reshaped into a tensor of shape 256,8,8 and then undergoes the following dimension changes
+
+256,8,8 -> 256,16,16 -> 256,32,32 -> 256,64,64 -> 3,64,64 (where each -> consists of a transposed convolution, batch normalization followed by LeakyReLU(0.2)
+with the exception of the last layer that does not have batchnorm and uses tanh nonlinearity)
+
+# OPTIMIZER
+The model is trained with the Adam optimizer with a learning rate of 0.0002, betas of 0.9 and 0.999, with a batch size of 25 for 200 epochs
