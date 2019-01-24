@@ -1,11 +1,11 @@
 # Disentangled Sequential Autoencoder
-PyTorch implementation of [Disentangled Sequential Autoencoder](https://arxiv.org/abs/1803.02991)  a Variational Autoencoder Architecture for learning latent representations of high dimensional sequential data by approximately disentangling the time invariant and the time variable features. 
+Reproduction of the ICML 2018 publication [Disentangled Sequential Autoencoder by Yinghen Li and Stephen Mandt](https://arxiv.org/abs/1803.02991), a Variational Autoencoder Architecture for learning latent representations of high dimensional sequential data by approximately disentangling the time invariant and the time variable features, without any modification to the ELBO objective. 
 
 # Network Architecture
 
 ## PRIOR OF Z:
 
-The prior of z is a Gaussian with mean and variance computed by the LSTM as follows
+The prior of `z` is a Gaussian with mean and variance computed by the LSTM as follows
 ```
 h_t, c_t = prior_lstm(z_t-1, (h_t, c_t)) where h_t is the hidden state and c_t is the cell state
 ```
@@ -22,11 +22,11 @@ The convolutional encoder consists of 4 convolutional layers with 256 layers and
 Each convolution is followed by a batch normalization layer and a LeakyReLU(0.2) nonlinearity.
 For the 3,64,64 frames (all image dimensions are in channel, width, height) in the sprites dataset the following dimension changes take place
 
-```3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8``` (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))
+```3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8 (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))```
 
 The 8,8,256 tensor is unrolled into a vector of size ```8*8*256``` which is then made to undergo the following tansformations
 
-```8*8*256 -> 4096 -> 2048``` (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+```8*8*256 -> 4096 -> 2048 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2)) ```
 
 ## APPROXIMATE POSTERIOR FOR f:
 
@@ -69,7 +69,7 @@ affine transforms, causing the following change in dimensions
 
 ```256 + 32 -> 4096 -> 8*8*256``` (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
 
-The 8*8*256 tensor is reshaped into a tensor of shape 256,8,8 and then undergoes the following dimension changes
+The ```8*8*256``` tensor is reshaped into a tensor of shape 256,8,8 and then undergoes the following dimension changes
 
 ```256,8,8 -> 256,16,16 -> 256,32,32 -> 256,64,64 -> 3,64,64``` (where each -> consists of a transposed convolution, batch normalization followed by LeakyReLU(0.2)
 with the exception of the last layer that does not have batchnorm and uses tanh nonlinearity)
