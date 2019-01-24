@@ -24,9 +24,9 @@ For the 3,64,64 frames (all image dimensions are in channel, width, height) in t
 
 ```3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8``` (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))
 
-The 8,8,256 tensor is unrolled into a vector of size 8*8*256 which is then made to undergo the following tansformations
+The 8,8,256 tensor is unrolled into a vector of size ```8*8*256``` which is then made to undergo the following tansformations
 
-```8*8*256 -> 4096 -> 2048`` (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+```8*8*256 -> 4096 -> 2048``` (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
 
 ## APPROXIMATE POSTERIOR FOR f:
 
