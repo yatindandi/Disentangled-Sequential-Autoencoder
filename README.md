@@ -3,7 +3,7 @@ PyTorch implementation of [Disentangled Sequential Autoencoder](https://arxiv.or
 
 # Network Architecture
 
-##PRIOR OF Z:
+## PRIOR OF Z:
 
 The prior of z is a Gaussian with mean and variance computed by the LSTM as follows
 ```
@@ -16,31 +16,31 @@ z = reparameterize(z_mean, z_log_variance)
 ```
 The hidden state has dimension 512 and z has dimension 32
 
-##CONVOLUTIONAL ENCODER:
+## CONVOLUTIONAL ENCODER:
 
 The convolutional encoder consists of 4 convolutional layers with 256 layers and a kernel size of 5
 Each convolution is followed by a batch normalization layer and a LeakyReLU(0.2) nonlinearity.
 For the 3,64,64 frames (all image dimensions are in channel, width, height) in the sprites dataset the following dimension changes take place
 
-3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8 (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))
+```3,64,64 -> 256,64,64 -> 256,32,32 -> 256,16,16 -> 256,8,8``` (where each -> consists of a convolution, batch normalization followed by LeakyReLU(0.2))
 
 The 8,8,256 tensor is unrolled into a vector of size 8*8*256 which is then made to undergo the following tansformations
 
-8*8*256 -> 4096 -> 2048 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+```8*8*256 -> 4096 -> 2048`` (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
 
-##APPROXIMATE POSTERIOR FOR f:
+## APPROXIMATE POSTERIOR FOR f:
 
-The approximate posterior is parameterized by a bidirectional LSTM that takes the entire sequence of transformed x_ts (after being fed into the convolutional encoder)
+The approximate posterior is parameterized by a bidirectional LSTM that takes the entire sequence of transformed ```x_t```s (after being fed into the convolutional encoder)
 as input in each timestep. The hidden layer dimension is 512
 
 Then the features from the unit corresponding to the last timestep of the forward LSTM and the unit corresponding to the first timestep of the
 backward LSTM (as shown in the diagram in the paper) are concatenated and fed to two affine layers (without any added nonlinearity) to compute
 the mean and variance of the Gaussian posterior for f
 
-##APPROXIMATE POSTERIOR FOR z (FACTORIZED q)
+## APPROXIMATE POSTERIOR FOR z (FACTORIZED q)
 
-Each x_t is first fed into an affine layer followed by a LeakyReLU(0.2) nonlinearity to generate an intermediate feature vector of dimension 512,
-which is then followed by two affine layers (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each z_t
+Each ```x_t``` is first fed into an affine layer followed by a LeakyReLU(0.2) nonlinearity to generate an intermediate feature vector of dimension 512,
+which is then followed by two affine layers (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each ```z_t```
 
 ```
 inter_t = intermediate_affine(x_t)
@@ -48,11 +48,11 @@ z_mean_t, z_log_variance_t = affine_mean(inter_t), affine_logvar(inter_t)
 z = reparameterize(z_mean_t, z_log_variance_t)
 ```
 
-##APPROXIMATE POSTERIOR FOR z (FULL q)
+## APPROXIMATE POSTERIOR FOR z (FULL q)
 
-The vector f is concatenated to each v_t where v_t is the encodings generated for each frame x_t by the convolutional encoder. This entire sequence  is fed into a bi-LSTM
-of hidden layer dimension 512. Then the features of the forward and backward LSTMs are fed into an RNN having a hidden layer dimension 512. The output h_t of each timestep
-of this RNN transformed by two affine transformations (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each z_t
+The vector ```f``` is concatenated to each ```v_t``` where ```v_t``` is the encodings generated for each frame ```x_t``` by the convolutional encoder. This entire sequence  is fed into a bi-LSTM
+of hidden layer dimension 512. Then the features of the forward and backward LSTMs are fed into an RNN having a hidden layer dimension 512. The output ```h_t``` of each timestep
+of this RNN transformed by two affine transformations (without any added nonlinearity) to compute the mean and variance of the Gaussian Posterior of each ```z_t```
 
 ```
 g_t = [v_t, f] for each timestep
@@ -64,14 +64,14 @@ z = reparameterize(z_mean_t, z_log_variance_t)
 
 ##CONVOLUTIONAL DECODER FOR CONDITIONAL DISTRIBUTION 
 
-The architecture is symmetric to that of the convolutional encoder. The vector f is concatenated to each z_t, which then undergoes two subsequent
+The architecture is symmetric to that of the convolutional encoder. The vector ```f``` is concatenated to each ```z_t```, which then undergoes two subsequent
 affine transforms, causing the following change in dimensions
 
-256 + 32 -> 4096 -> 8*8*256 (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
+```256 + 32 -> 4096 -> 8*8*256``` (where each -> consists of an affine transformation, batch normalization followed by LeakyReLU(0.2))
 
 The 8*8*256 tensor is reshaped into a tensor of shape 256,8,8 and then undergoes the following dimension changes
 
-256,8,8 -> 256,16,16 -> 256,32,32 -> 256,64,64 -> 3,64,64 (where each -> consists of a transposed convolution, batch normalization followed by LeakyReLU(0.2)
+```256,8,8 -> 256,16,16 -> 256,32,32 -> 256,64,64 -> 3,64,64``` (where each -> consists of a transposed convolution, batch normalization followed by LeakyReLU(0.2)
 with the exception of the last layer that does not have batchnorm and uses tanh nonlinearity)
 
 # OPTIMIZER
