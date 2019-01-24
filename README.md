@@ -82,7 +82,7 @@ The model is trained with the Adam optimizer with a learning rate of 0.0002, bet
 * Dimension of the content encoding f : 256 
 * Dimension of the dynamics encoding of a frame z_t : 32 
 * Number of frames in the video : 8
-* Dimension of the hidden states of the RNNs 
+* Dimension of the hidden states of the RNNs : 512
 * Nonlinearity used in convolutional and deconvolutional layers : LeakyReLU(0.2) in intermediate layers, Tanh in last layer of deconvolutional (Chosen arbitrarily, not stated in the paper)
 * Number of channels in the convolutional and deconvolutional layers : 256
 * Dimension of convolutional encoding generated from the video frames: 2048 (Chosen arbitrarily, not stated in the paper)
